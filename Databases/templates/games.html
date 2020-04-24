@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>League of Legends Games Query Page</title>
+</head>
+<body>
+<h1>results of League of Legends Games Query</h1>
+	<div>{{data}}</div>
+
+	<div>
+		{% for n in data %}
+		<div>{{n}}</div>
+		{% endfor %}
+	</div>
+<h1>Input player name to search for match history: </h1>
+
+<form method = "POST" action = "/pidforgame">
+<p>name of player: <input type = "text" name = "name"> <input type = "submit" value = "Add"></p>
+
+<input type="date" name="date"> Date <br>
+
+</form>
+
+<h1>Or, input game id to look up a specific match: </h1>
+<form method = "POST" action = "/gid">
+
+<p>Game: <input type = "text" name = "gid"> <input type = "submit" value = "Add"></p>
+
+</form>
+</body>
+</html>

@@ -1,0 +1,311 @@
+#!/usr/bin/env python
+
+from socket import socket, AF_INET, SOCK_STREAM
+import sys
+import re
+import time
+import thread
+import select
+
+# global variables
+filename = sys.argv[1]
+alpha = float(sys.argv[2])
+proxyPort = int(sys.argv[3])
+fakeIP = sys.argv[4]
+serverIP = sys.argv[5]
+crlf = '\r\n\r\n'
+bitrates = []
+log = open(filename, 'w+')
+
+# returns a socket that the proxy listens for incoming connections on
+def bind():       
+	listenSocket = socket(AF_INET, SOCK_STREAM)
+	listenSocket.bind(('', proxyPort))
+	listenSocket.listen(20)
+	return listenSocket
+
+# reads in request from client (browser)
+def readrequest(sock, buf = 1):
+    request = ''
+    while crlf not in request:
+        try:
+            request = request + sock.recv(buf)
+        except:
+            print("Can't connect to client!")
+            log.close()
+            return None
+    #print(request)
+    return request
+
+# reads response from server
+def readresponse(sock, buf = 1):
+    
+    # boolean for manifest file scenario
+    manifest = False
+    stream = ''
+    select.select([sock], [], [])
+    
+    # reading in header from socket
+    while crlf not in stream:
+        try:
+            stream = stream + sock.recv(buf)
+        except:
+            print("Can't connect to server!")
+            log.close()
+            return None
+            
+            
+    streamList = stream.split('\r\n')
+    length = 0
+    
+    # looking for content-length header
+    for item in streamList:
+        if 'Content-Length' in item:
+            length = int(item.split(':')[1])
+        if 'xml' in item:
+            manifest = True
+    
+    i = 0
+    response = ''
+    
+    # reading in content from socket
+    while i < length:
+        response = response + sock.recv(buf)
+        i = i + 1
+        
+    # if the file is .f4m, need to read in bitrates
+    if manifest == True:
+        lines = re.split('media', response)
+        for line in lines:
+            if 'bitrate' in line:
+                bitrate = (line.split('=')[1]).split('\n\t\t url')[0]
+                clean = bitrate.replace('"', '')
+                bitrates.append(clean)
+            
+    # if the response is empty, return None 
+    if len(response) == 0:
+        return None, 0
+    
+    else:
+        return stream + response, length
+
+# function that handles the actual back and forth
+
+def run(listenSocket, loglock):
+    
+    while True: 
+        
+        # creating socket between client and proxy:
+        c_pSocket, addr = listenSocket.accept()
+        thread.start_new_thread(run, (listenSocket, loglock))
+        
+        # creating socket between server and proxy:
+        s_pSocket = socket(AF_INET, SOCK_STREAM)
+        bindInfo = (fakeIP, 0)
+        s_pSocket.bind(bindInfo)
+        connectInfo = (serverIP, 8080)
+        
+        # try catch for situation where server isn't running
+        try:
+            s_pSocket.connect(connectInfo)
+        except:
+            print("can't connect to server")
+            connectionSocket.close()
+            log.close()
+            return None
+        
+        # throughput initialized to 0
+        throughput = 0
+        
+        while True: 
+            
+            # getting request from client:
+            request = readrequest(c_pSocket, 1)
+            ts = time.time()
+            
+            # empty request
+            if request == None:
+                print("no request from client")
+                c_pSocket.close()
+       	        s_pSocket.close()
+                log.close()
+                return None
+            
+            firstline = request.split('\r\n')[0]
+            
+            # checking to see if request has manifest request
+            if 'big_buck_bunny.f4m' in firstline: 
+                
+                modf4m = request.split('big_buck_bunny.f4m')
+                
+                # modifying request to be for nolist f4m
+                nolist = modf4m[0] + 'big_buck_bunny_nolist.f4m' + modf4m[1]
+                
+                s_pSocket.send(nolist)
+                response, length = readresponse(s_pSocket, 1)
+                
+                # sending real request to server 
+                s_pSocket.send(request)
+                
+                # reading in the correct file for bitrate adaptation
+                response1, length1 = readresponse(s_pSocket, 1)
+                
+                # if empty response
+                if response == None:
+                    print("no response from server")
+                    c_pSocket.close()
+       	            s_pSocket.close()
+                    log.close()
+                    return None
+                
+                # sending nolist manifest to client
+                c_pSocket.send(response)
+                
+            # for first fragment, have to set bitrate to lowest available 
+            elif 'Seg1-Frag1' in firstline:
+                
+                newmsg = request 
+                throughput = bitrates[0]
+                
+                # replacing request bitrate with lowest bitrate
+                if bitrates[1] in (request.split('Seg', 1)[0]).split('GET /vod/')[1]: 
+                    newmsg = re.sub(bitrates[1], bitrates[0], request, 1)
+                if bitrates[2] in (request.split('Seg', 1)[0]).split('GET /vod/')[1]:
+                    newmsg = re.sub(bitrates[2], bitrates[0], request, 1)
+                if bitrates[3] in (request.split('Seg', 1)[0]).split('GET /vod/')[1]:
+                    newmsg = re.sub(bitrates[3], bitrates[0], request, 1)
+                s_pSocket.send(newmsg)
+               
+                # getting response from server
+                response, length = readresponse(s_pSocket, 1)
+                tf = time.time()
+                
+                # if empty response
+                if response == None:
+                    print("no response from server")
+                    c_pSocket.close()
+       	            s_pSocket.close()
+                    log.close()
+                    return None
+                
+                timedif = float(tf - ts)
+                
+                # current throughput measurement
+                actual = (length*8)/timedif
+                
+                # weighted avg for throughput
+                throughput = alpha * (actual) + (1-alpha) * float(throughput)
+                
+                # sending response to client
+                c_pSocket.send(response)
+                
+                # finding chunkname for logging purposes
+                chunkline = newmsg.split('\r\n')[0]
+                chunkline = chunkline.split('GET ')[1]
+                chunk = chunkline.split(' HTTP/1.1')[0]
+                
+                # printing to log file--have to acquire and then release the lock
+                loglock.acquire()
+                print >> log, int(time.time()), timedif, int(throughput/1000), float('%.1f' % int(actual/1000)), bitrates[0], serverIP, chunk
+                loglock.release()
+ 
+            # for every other requested fragment NOT a video fragment
+            elif 'Seg' not in request:
+                
+                s_pSocket.send(request)
+                response, length = readresponse(s_pSocket, 1)
+                 
+                # if empty response
+                if response == None:
+                    print("no response from server")
+                    c_pSocket.close()
+       	            s_pSocket.close()
+                    log.close()
+                    return None
+                
+                c_pSocket.send(response)
+                
+                
+                
+            # for every other video fragment 
+            else:
+                # minimum throughput required
+                minthru = ((0.6666666666666666)*throughput)/1000
+                
+                count = 0
+                sendrate = 0
+                
+                # parsing bitrates for suitable bitrate
+                if minthru > float(bitrates[len(bitrates)-1]):
+                    sendrate = bitrates[len(bitrates)-1]
+                elif minthru < float(bitrates[0]):
+                    sendrate = bitrates[0]
+                else:
+                    while count < len(bitrates):
+                        if float(bitrates[count]) > minthru:
+                            sendrate = bitrates[count - 1]
+                            break
+                        count += 1
+                
+                
+                # replacing the requested bitrate with our adjusted calculation
+                newmsg = ''
+                if bitrates[1] in (request.split('Seg', 1)[0]).split('GET /vod/')[1]: 
+                    newmsg = re.sub(bitrates[1], str(sendrate), request, 1)
+                if bitrates[2] in (request.split('Seg', 1)[0]).split('GET /vod/')[1]:
+                    newmsg = re.sub(bitrates[2], str(sendrate), request, 1)
+                if bitrates[3] in (request.split('Seg', 1)[0]).split('GET /vod/')[1]:
+                    newmsg = re.sub(bitrates[3], str(sendrate), request, 1)
+                
+                if len(newmsg) == 0:
+                    s_pSocket.send(request)
+                else:     
+                    s_pSocket.send(newmsg)
+                
+                # response from server
+                response, length = readresponse(s_pSocket, 1)
+                tf = time.time()
+                timedif = float(tf-ts)
+                
+                # current throughput calculation
+                actual = (length*8)/timedif
+                
+                # calculating new throughput
+                throughput = (alpha * actual) + (1-alpha) * float(throughput)
+                c_pSocket.send(response) 
+               
+
+                # parsing modified request for chunkname
+                chunkline = newmsg.split('\r\n')[0]
+                chunkl = chunkline.split('GET ')[1]
+                chunk = chunkl.split(' HTTP/1.1')[0]
+                
+                # printing to log file: 
+                loglock.acquire()
+                print >> log, int(time.time()), timedif, int(throughput/1000), float('%.1f' % int(actual/1000)), sendrate, serverIP, chunk
+                loglock.release()
+        
+        # closing sockets
+        print("closing sockets: ")
+       	c_pSocket.close()
+       	s_pSocket.close()
+        log.close()    
+
+
+def main(): 
+    # running proxy:
+    
+    sock = bind()
+        #log = open(filename, 'r+')
+    loglock = thread.allocate_lock()
+    run(sock, loglock)
+    sock.close()
+    log.close()
+   
+   
+# running main method
+main()
+
+
+
+

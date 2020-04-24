@@ -1,0 +1,26 @@
+  9 Pupin
+ 19 SchapiroCEPSR
+ 28 Mudd&EngTerrace&Fairchild&CS
+ 38 NorthwestCorner
+ 47 Uris
+ 57 Schermerhorn
+ 66 Chandler&Havemeyer
+ 76 OldComputerCenter
+ 85 Avery
+ 94 Fayerweather
+104 Mathematics
+113 LowLibrary
+123 StPaulChapel
+132 EarlHall
+142 Lewisohn
+151 Philosophy
+161 Buell
+170 AlmaMater
+179 Dodge
+189 Kent
+198 CollegeWalk
+208 Journalism&Furnald
+217 Hamilton&Hartley&Wallach&JohnJay
+236 Lerner
+246 ButlerLibrary
+255 Carman

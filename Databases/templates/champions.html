@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>champion_results</title>
+</head>
+<body>
+	<h1>League of Legends Champions Query Page</h1>
+	<!-- <div>{{data}}</div> -->
+	<div>
+		{% for n in data %}
+		<div>{{n}}</div>
+		{% endfor %}
+	</div>
+	<form method = "POST" action = "/getitems">
+	  <p>name of new player: <input type = "text" name = "name"><br>
+	  <!-- <input type = "submit" value = "search"></p> -->
+	  <input type="checkbox" name="ability"> Abilities <br>
+	  <input type="checkbox" name="role"> Role<br>
+	  <input type="checkbox" name="region"> Region<br>
+	  <input type="checkbox" name="item"> Items<br>
+	  <input type="submit" value="search">
+	</form>
+</body>
+</html>

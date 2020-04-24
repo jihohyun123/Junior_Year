@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>item_results</title>
+</head>
+<body>
+	<h1>results of league of legends items query</h1>
+	<div>{{data}}</div>
+
+	<div>
+		{% for n in data %}
+		<div>{{n}}</div>
+		{% endfor %}
+	</div>
+<form method = "POST" action = "/add">
+<p>name of item: <input type = "text" name = "name"> <input type = "submit" value = "Add"></p>
+</form>
+
+</body>
+</html>

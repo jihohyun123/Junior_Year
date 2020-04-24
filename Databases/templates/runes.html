@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>runes_results</title>
+</head>
+<body>
+	<h1>League of Legends Runes Query Page</h1>
+	<!-- <div>{{data}}</div> -->
+	<div>
+		{% for n in data %}
+		<div>{{n}}</div>
+		{% endfor %}
+	</div>
+	<form method = "POST" action = "/getrunes">
+	  <p>name of primary path: <input type = "text" name = "primary">
+	  <!-- <input type = "submit" value = "search"></p> -->
+	  <input type="submit" value="search">
+	</form>
+</body>
+</html>
